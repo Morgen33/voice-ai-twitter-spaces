@@ -97,8 +97,15 @@ class ConvoCore:
             self._setup_vb_cable_devices(devices)
         elif device == "blackhole" and platform.system() == "Darwin":
             self._setup_blackhole_devices(devices)
-        elif device == "default":
-            self.device_logger.info("Using system default audio devices")
+        elif device == "default" or (
+            device == "vb-cables" and platform.system() == "Linux"
+        ):
+            if device == "vb-cables" and platform.system() == "Linux":
+                self.device_logger.info(
+                    "VB-Cable is Windows/macOS only; using system default audio devices on Linux"
+                )
+            else:
+                self.device_logger.info("Using system default audio devices")
             # No change to devices - keep default
         else:
             raise Exception("Unsupported OS or device configuration")

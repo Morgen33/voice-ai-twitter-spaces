@@ -40,11 +40,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run the GUI",
     )
+    default_device = "default" if platform.system() == "Linux" else "vb-cables"
     parser.add_argument(
         "--device",
         type=str,
         choices=["vb-cables", "blackhole", "default"],
-        default="vb-cables",
+        default=default_device,
         required=False,
         help="Audio device to use: vb-cables (VB-Cable), blackhole (BlackHole 2ch), or default (default mic and speaker)",
     )

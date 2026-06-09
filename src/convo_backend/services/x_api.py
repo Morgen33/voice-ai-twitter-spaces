@@ -6,9 +6,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def get_x_bearer_token() -> str:
+    token = os.environ.get("X_API_BEARER_TOKEN") or os.environ.get("X_BEARER_TOKEN")
+    if not token:
+        raise KeyError(
+            "Missing X bearer token. Set X_BEARER_TOKEN or X_API_BEARER_TOKEN in .env"
+        )
+    return token
+
+
 async def get_x_spaces(query: str):
     url = f"https://api.x.com/2/spaces/search?query={query}&state=live&expansions=host_ids,speaker_ids,topic_ids&space.fields=lang"
-    headers = {"Authorization": f"Bearer {os.environ['X_API_BEARER_TOKEN']}"}
+    headers = {"Authorization": f"Bearer {get_x_bearer_token()}"}
     response = requests.get(url, headers=headers)
     return response.json()
 
