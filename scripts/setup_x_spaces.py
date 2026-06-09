@@ -25,7 +25,7 @@ ENV_EXAMPLE = ROOT / "env.example"
 
 REQUIRED_FOR_ROAMING = ["X_USERNAME", "X_PASSWORD"]
 OPTIONAL_FOR_SEARCH = ["X_BEARER_TOKEN", "X_API_BEARER_TOKEN"]
-OPTIONAL_API = ["X_API_KEY", "X_API_SECRET"]
+OPTIONAL_API = ["X_API_KEY", "X_API_SECRET", "X_ACCESS_TOKEN", "X_ACCESS_TOKEN_SECRET"]
 
 
 def ensure_env_file() -> None:
@@ -73,9 +73,20 @@ def check_env() -> int:
     for key in OPTIONAL_API:
         value = os.getenv(key)
         status = "ok" if value and "your_" not in value else "optional"
-        print(f"  {key}: {status} ({mask(value)})")
+        label = key
+        if key == "X_API_KEY":
+            label = "X_API_KEY (OAuth 1.0 Consumer Key)"
+        elif key == "X_API_SECRET":
+            label = "X_API_SECRET (OAuth 1.0 Consumer Secret)"
+        elif key == "X_ACCESS_TOKEN":
+            label = "X_ACCESS_TOKEN (OAuth 1.0 Access Token)"
+        elif key == "X_ACCESS_TOKEN_SECRET":
+            label = "X_ACCESS_TOKEN_SECRET (OAuth 1.0 Access Token Secret)"
+        print(f"  {label}: {status} ({mask(value)})")
 
     print()
+    print("OAuth 1.0 note: Consumer Key/Secret are optional for Convo today.")
+    print("Joining Spaces still uses browser login: X_USERNAME + X_PASSWORD.")
     if missing:
         print("Missing required X login credentials:")
         for key in missing:
