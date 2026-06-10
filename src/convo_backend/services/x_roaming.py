@@ -8,7 +8,7 @@ import logging
 from typing import Optional
 import asyncio
 import os
-from convo_backend.services.x_api import get_x_spaces, parse_x_spaces
+from convo_backend.services.x_api import get_x_spaces, parse_x_spaces, choose_intel_space
 import random
 from langchain_core.tools import tool
 from selenium.common.exceptions import StaleElementReferenceException
@@ -22,7 +22,7 @@ class ConvoRoamer:
     Handles browser automation for X (Twitter) spaces interaction using Selenium.
     """
 
-    def __init__(self, desired_spaces: Optional[list[str]] = None):
+    def __init__(self, desired_spaces: Optional[list[str]] = None, listen_only: bool = False, intel_selection: bool = False):
         """Initialize browser automation components and configuration."""
         self.browser_logger = logging.getLogger("convo.roaming")
         self.driver = None
@@ -32,7 +32,10 @@ class ConvoRoamer:
         self.roaming_interval = Config.BEHAVIORAL_CONFIG.get("spaces_interval")
         self.is_roaming = False
         self.topics = Config.BEHAVIORAL_CONFIG.get("spaces_keywords")
+        self.intel_keywords = Config.BEHAVIORAL_CONFIG.get("intel_keywords", self.topics)
         self.desired_spaces = self.parse_spaces(desired_spaces)
+        self.listen_only = listen_only
+        self.intel_selection = intel_selection
         self.is_muted = True
         self.sync_mute_task: asyncio.Task | None = None
         self.roaming_task = None
@@ -242,20 +245,21 @@ class ConvoRoamer:
             try:
                 if self.desired_spaces:  # if desired spaces are set, join them
                     for space in self.desired_spaces:
-                        if await self.join_space(space):
+                        if await self.join_space(space, auto_ask_to_speak=not self.listen_only):
                             self.joined_spaces.append(space)
                             await asyncio.sleep(self.roaming_interval)
                             await self.leave_space()
                         else:
                             self.browser_logger.info(
-                                "Failed to unmute, moving to next space"
+                                "Failed to join space, moving to next space"
                             )
                             await self.leave_space()
                             continue
                     self.browser_logger.info("All desired spaces have been visited")
                     await self.stop_roaming()
                 else:  # if desired spaces are not set, roam through random topics
-                    topic = random.choice(self.topics)
+                    topics = self.intel_keywords if self.intel_selection else self.topics
+                    topic = random.choice(topics)
                     api_response = await get_x_spaces(topic)
                     parsed_spaces = parse_x_spaces(api_response)
                     if not parsed_spaces:
@@ -268,12 +272,14 @@ class ConvoRoamer:
                         for space in parsed_spaces
                         if space["space_id"] not in self.joined_spaces
                     ]
-                    space_id = await self.chat_service.choose_x_space(parsed_spaces)
+                    if self.intel_selection:
+                        space_id = choose_intel_space(parsed_spaces, self.intel_keywords)
+                    else:
+                        space_id = await self.chat_service.choose_x_space(parsed_spaces)
 
-                    # If join_space fails to unmute, move to next space immediately
-                    if not await self.join_space(space_id):
+                    if not await self.join_space(space_id, auto_ask_to_speak=not self.listen_only):
                         self.browser_logger.info(
-                            "Failed to unmute, moving to next space"
+                            "Failed to join space, moving to next space"
                         )
                         await self.leave_space()
                         continue

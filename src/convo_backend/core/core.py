@@ -2,6 +2,9 @@ import logging
 import sounddevice as sd
 import asyncio
 import queue
+import json
+import os
+from datetime import datetime
 from silero_vad import load_silero_vad
 import torch
 from convo_backend.services.transcription import transcribe_audio
@@ -32,6 +35,7 @@ class ConvoCore:
         roam: bool = False,
         monitor: bool = False,
         desired_spaces: list[str] = None,
+        intel_mode: bool = False,
     ):
         """Initialize audio processing components and configuration parameters."""
         self.audio_logger = logging.getLogger("convo.audio")
@@ -51,9 +55,13 @@ class ConvoCore:
         # Separate streams for input and output
         self.input_stream = None
         self.output_stream = None
-        self.tts_stream = TTSStream()
+        self.tts_stream = None if intel_mode else TTSStream()
 
-        self.x_roamer = ConvoRoamer(desired_spaces=desired_spaces)
+        self.x_roamer = ConvoRoamer(
+            desired_spaces=desired_spaces,
+            listen_only=intel_mode,
+            intel_selection=intel_mode,
+        )
 
         self.chat_service = ChatService()
 
@@ -81,6 +89,7 @@ class ConvoCore:
 
         self.roam = roam
         self.monitor = monitor
+        self.intel_mode = intel_mode
 
         self.MIN_BUFFER_SIZE = (
             self.OUTPUT_RATE // self.OUTPUT_CHUNK
@@ -273,7 +282,8 @@ class ConvoCore:
         self.INPUT_CHUNK = self.input_stream.blocksize
 
         # Start TTS server connection
-        await self.tts_stream.connect()
+        if not self.intel_mode:
+            await self.tts_stream.connect()
 
         # Start processing thread
         self.running = True
@@ -301,11 +311,25 @@ class ConvoCore:
             self.monitor_from_x.stop()
             self.monitor_from_x.close()
 
-        await self.tts_stream.close()
+        if self.tts_stream:
+            await self.tts_stream.close()
 
-        
-        
-
+    def _save_intel_transcript(self, transcription: dict):
+        os.makedirs(Config.INTEL_OUTPUT_PATH, exist_ok=True)
+        entry = {
+            "timestamp": transcription["timeStamp"].isoformat()
+            if transcription.get("timeStamp")
+            else datetime.utcnow().isoformat() + "Z",
+            "text": transcription.get("message", ""),
+            "space_id": self.x_roamer.current_space_id,
+            "space_url": f"https://x.com/i/spaces/{self.x_roamer.current_space_id}"
+            if self.x_roamer.current_space_id
+            else None,
+        }
+        path = os.path.join(Config.INTEL_OUTPUT_PATH, "transcripts.jsonl")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(entry) + "\n")
+        self.pipeline_logger.info(f"Saved transcript from Space {entry['space_id']}")
     async def start_roaming(self):
         """Roam to X spaces"""
         await self.x_roamer.start()
@@ -336,33 +360,35 @@ class ConvoCore:
         """Start the AI response generation pipeline, canceling any existing response task."""
         if self.current_response_task:
             self.pipeline_logger.info("Cancelling existing response pipeline tasks")
-            # Cancel all tasks first
             self.current_response_task.cancel()
-            if self.tts_stream.send_task:
-                self.tts_stream.send_task.cancel()
-            if self.tts_stream.collection_task:
-                self.tts_stream.collection_task.cancel()
+            if self.tts_stream:
+                if self.tts_stream.send_task:
+                    self.tts_stream.send_task.cancel()
+                if self.tts_stream.collection_task:
+                    self.tts_stream.collection_task.cancel()
 
             try:
-                if self.tts_stream.send_task:
-                    await self.tts_stream.send_task
-                if self.tts_stream.collection_task:
-                    await self.tts_stream.collection_task
+                if self.tts_stream:
+                    if self.tts_stream.send_task:
+                        await self.tts_stream.send_task
+                    if self.tts_stream.collection_task:
+                        await self.tts_stream.collection_task
                 if self.current_response_task:
                     await self.current_response_task
             except asyncio.CancelledError:
                 self.pipeline_logger.debug("Pipeline tasks cancellation completed")
                 pass
 
-            # Finally drain any remaining messages
-            await self.tts_stream.drain_socket_messages()
+            if self.tts_stream:
+                await self.tts_stream.drain_socket_messages()
             # Empty output queue
             while not self.output_queue.empty():
                 self.output_queue.get_nowait()
 
             self.current_response_task = None
-            self.tts_stream.send_task = None
-            self.tts_stream.collection_task = None
+            if self.tts_stream:
+                self.tts_stream.send_task = None
+                self.tts_stream.collection_task = None
 
         # Start new response task
 
@@ -374,6 +400,10 @@ class ConvoCore:
         """
         try:
             transcription = await transcribe_audio(audio_queue=self.transcription_queue)
+            if self.intel_mode:
+                self._save_intel_transcript(transcription)
+                return
+
             # Save transcript to memory (mongodb)
             asyncio.create_task(
                 asyncio.to_thread(

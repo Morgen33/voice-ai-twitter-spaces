@@ -59,5 +59,23 @@ def get_space_by_id(spaces: list, space_id: str):
     return None
 
 
+def choose_intel_space(parsed_spaces: list[dict], keywords: list[str] | None = None) -> str:
+    """Pick the Space most likely to contain complaints, alpha, and active discussion."""
+    keywords = [k.lower() for k in (keywords or [])]
+
+    def score(space: dict) -> int:
+        value = len(space.get("speakers", [])) * 10 + len(space.get("hosts", [])) * 5
+        topic_text = " ".join(
+            t.get("name", "") + " " + t.get("description", "")
+            for t in space.get("topics", [])
+        ).lower()
+        for keyword in keywords:
+            if keyword in topic_text:
+                value += 15
+        return value
+
+    return max(parsed_spaces, key=score)["space_id"]
+
+
 def construct_x_api_url(space_id: str):
     return f"https://x.com/i/spaces/{space_id}"

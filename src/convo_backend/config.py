@@ -44,6 +44,9 @@ class Config:
     DEFAULT_PROMPT_PATH: ClassVar[str] = f"{ASSETS_PATH}/default_prompt.txt"
     CHOOSE_SPACE_PROMPT_PATH: ClassVar[str] = f"{ASSETS_PATH}/choose_space_prompt.txt"
     FILLER_PROMPT_PATH: ClassVar[str] = f"{ASSETS_PATH}/filler_prompt.txt"
+    INTEL_ANALYSIS_PROMPT_PATH: ClassVar[str] = f"{ASSETS_PATH}/intel_analysis_prompt.txt"
+    DATA_SAVE_PATH: ClassVar[str] = "data"
+    INTEL_OUTPUT_PATH: ClassVar[str] = "data/spaces_intel"
 
     # Classifier settings
     CLASSIFIER_MODEL_PATH: ClassVar[str] = f"{BASE_PATH}/assets/models/classifier.onnx"
