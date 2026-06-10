@@ -48,6 +48,7 @@ deploy_*.py
 # Configuration files with sensitive data
 config.local.json
 config.prod.json
+data/spaces_intel/
 
 # Audio files
 dev.mp3

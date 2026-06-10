@@ -40,13 +40,19 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Run the GUI",
     )
+    default_device = "default" if platform.system() == "Linux" else "vb-cables"
     parser.add_argument(
         "--device",
         type=str,
         choices=["vb-cables", "blackhole", "default"],
-        default="vb-cables",
+        default=default_device,
         required=False,
         help="Audio device to use: vb-cables (VB-Cable), blackhole (BlackHole 2ch), or default (default mic and speaker)",
+    )
+    parser.add_argument(
+        "--intel",
+        action="store_true",
+        help="Listen-only intel mode: transcribe Spaces without talking back",
     )
     parser.add_argument(
         "--roam",
@@ -129,6 +135,7 @@ async def main(args: argparse.Namespace):
                 roam=args.roam,
                 monitor=args.monitor,
                 desired_spaces=args.desired_spaces,
+                intel_mode=args.intel,
             )
             await convo.start()
             await detect_end_program(convo)
@@ -168,6 +175,7 @@ if __name__ == "__main__":
             device="vb-cables",
             roam=False,
             monitor=False,
+            intel=False,
             desired_spaces=None,
             audio_log_level="INFO",
             vad_log_level="INFO",
